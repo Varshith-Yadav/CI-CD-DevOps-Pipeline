@@ -8,6 +8,29 @@ This project implements a robust CI/CD pipeline that automates the entire proces
 
 ![CI/CD Pipeline Architecture](https://placeholder-for-architecture-diagram.png)
 
+
+java-k8s-app/
+├── Dockerfile
+├── k8s/
+│   ├── deployment.yaml
+│   ├── service.yaml
+├── mvnw
+├── mvnw.cmd
+├── pom.xml
+├── src/
+│   └── main/
+│       ├── java/
+│       │   └── com/
+│       │       └── example/
+│       │           └── demo/
+│       │               ├── DemoApplication.java
+│       │               └── controller/
+│       │                   └── HelloController.java
+│       └── resources/
+│           └── application.properties
+
+
+
 ## Features
 
 - Automated build process for Java applications
