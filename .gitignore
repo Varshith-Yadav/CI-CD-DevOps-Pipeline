@@ -1,0 +1,39 @@
+# Java
+*.class
+*.log
+*.war
+*.ear
+
+# Maven
+/target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Eclipse/IntelliJ
+*.iml
+*.ipr
+*.iws
+.idea/
+*.swp
+*.swo
+*.bak
+*.tmp
+*.DS_Store
+*.vscode/
+*.project
+*.classpath
+.settings/
+
+# Logs
+logs/
+*.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Environment/IDE
+.env
+*.env
+
+# Docker
+*.pid
