@@ -2,15 +2,20 @@ pipeline {
     agent any
 
     environment {
-        // Update these if your names are different
-        SONARQUBE_SERVER = 'MySonarQube'         // Name set in Jenkins Global Config
-        SONAR_PROJECT_KEY = 'java-cicd-on-k8s'
-        SONAR_TOKEN = credentials('sonar-token') // Add token via Jenkins Credentials
-        IMAGE_NAME = 'java-cicd-demo:latest'
-        DOCKER_IMAGE = 'varshithyadav/java-cicd-demo'
+        // Jenkins global config keys or credentials IDs
+        SONARQUBE_SERVER = 'sonarqube'
+        SONAR_PROJECT_KEY = 'java-k8s-app'
+        SONAR_TOKEN = credentials('sonar-token')
+
+        IMAGE_NAME = 'ci-cd-java'
+        DOCKER_IMAGE = 'varshithyadav/java-cicd-demo:latest'
         DOCKER_USER = 'varshithyadav'
-        DOCKER_PASS = credentials('docker-creds') // Add password via Jenkins Credentials
-        EMAIL_RECIPIENTS = 'varshithyadav587@gmail.com' 
+        DOCKER_PASS = credentials('docker-creds')
+
+        EMAIL_RECIPIENTS = 'varshithyadav587@gmail.com'
+
+        // Path to your Kubernetes manifests
+        K8S_MANIFEST_PATH = 'k8s/deployment.yaml'
     }
 
     stages {
@@ -23,26 +28,26 @@ pipeline {
         stage('SonarQube - Code Quality') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_SERVER}") {
-                    sh 'mvn clean verify sonar:sonar ' +
-                       "-Dsonar.projectKey=${SONAR_PROJECT_KEY} " +
-                       "-Dsonar.login=${SONAR_TOKEN}"
+                    sh '''
+                        mvn clean verify sonar:sonar \
+                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                        -Dsonar.login=${SONAR_TOKEN}
+                    '''
                 }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    sh "docker build -t ${IMAGE_NAME} ."
-                }
+                sh "docker build -t ${IMAGE_NAME} ."
             }
         }
 
         stage('Trivy - Docker Image Scan') {
             steps {
                 sh """
-                docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                aquasec/trivy image ${IMAGE_NAME}
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                    aquasec/trivy image ${IMAGE_NAME}
                 """
             }
         }
@@ -50,13 +55,25 @@ pipeline {
         stage('Push to Docker Hub') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    script {
-                        sh """
+                    sh '''
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker tag ${IMAGE_NAME} $DOCKER_USER/java-cicd-demo:latest
-                        docker push $DOCKER_USER/java-cicd-demo:latest
-                        """
-                    }
+                        docker tag ${IMAGE_NAME} ${DOCKER_IMAGE}
+                        docker push ${DOCKER_IMAGE}
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to GKE') {
+            steps {
+                script {
+                    // Replace image name in manifest with latest tag
+                    sh """
+                        sed -i 's|image: .*|image: ${DOCKER_IMAGE}|' ${K8S_MANIFEST_PATH}
+                        kubectl apply -f ${K8S_MANIFEST_PATH}
+                        kubectl rollout status deployment/java-cicd-demo
+                        kubectl get pods -l app=java-cicd-demo
+                    """
                 }
             }
         }
@@ -64,44 +81,40 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 script {
-                    sh 'kubectl rollout status deployment/java-cicd-demo'
-                    // Optional: curl the app or check logs
+                    // Optional: Validate that the service is up via curl or logs
+                    sh 'kubectl logs -l app=java-cicd-demo --tail=10 || true'
                 }
             }
         }
-
-
     }
 
     post {
-        success{
+        success {
             emailext(
-                subject: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
-                body: """<p>BUILD SUCCESS:</p>
-                <p>Job: ${env.JOB_NAME}</p>
-                <p>Build Number: ${env.BUILD_NUMBER}</p>
-                <p>Build URL: ${env.BUILD_URL}</p>""",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
+                subject: "✅ SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: """<p><strong>Build Succeeded</strong></p>
+                         <p>Job: ${env.JOB_NAME}</p>
+                         <p>Build: ${env.BUILD_NUMBER}</p>
+                         <p><a href="${env.BUILD_URL}">View Build</a></p>""",
                 to: "${EMAIL_RECIPIENTS}",
                 mimeType: 'text/html'
             )
         }
-        failure{
+
+        failure {
             emailext(
-                subject: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
-                body: """<p>BUILD FAILED:</p>
-                <p>Job: ${env.JOB_NAME}</p>
-                <p>Build Number: ${env.BUILD_NUMBER}</p>
-                <p>Build URL: ${env.BUILD_URL}</p>
-                <p>Error: ${currentBuild.description ?: 'Unknown error'}</p>""",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
+                subject: "❌ FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: """<p><strong>Build Failed</strong></p>
+                         <p>Job: ${env.JOB_NAME}</p>
+                         <p>Build: ${env.BUILD_NUMBER}</p>
+                         <p><a href="${env.BUILD_URL}">View Build</a></p>""",
                 to: "${EMAIL_RECIPIENTS}",
                 mimeType: 'text/html'
             )
         }
 
         always {
-            echo 'Pipeline finished. Cleanup or reporting can be added here.'
+            echo '⚙️ Pipeline complete.'
         }
     }
 }
