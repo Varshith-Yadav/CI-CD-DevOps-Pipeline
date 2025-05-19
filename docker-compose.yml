@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  java-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: java-cicd-demo:latest
+    ports:
+      - "9000:9000"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+    restart: unless-stopped
